@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.location.Location;
 import android.os.AsyncTask;
 import android.os.Handler;
@@ -14,6 +15,7 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -30,6 +32,8 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.Polyline;
+import com.google.android.gms.maps.model.PolylineOptions;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -44,6 +48,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.LogRecord;
 
@@ -72,7 +77,9 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
     private GoogleApiClient mGoogleApiClient;
     boolean syncWithServer=true;
     double latitude, longitude;
-
+    String rideid;
+    Button acceptbutton;
+    Polyline polylineroute;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -269,14 +276,19 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
             Thread timer = new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    while(syncWithServer) {
-                        String response = getUberRequest();
-                        threadMsg(response);
+                    while(true)
+                    {
+                        if (syncWithServer)
+                        {
+                            String response = getUberRequest();
+                            threadMsg(response);
+
+                        }
+
                         try
                         {
                             Thread.sleep(7000);
-                        }
-                        catch(InterruptedException e)
+                        } catch (InterruptedException e)
                         {
                             e.printStackTrace();
                         }
@@ -325,7 +337,13 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
 
     @Override
     public void onClick(View v) {
-
+        switch(v.getId())
+        {
+            default:
+            case R.id.acceptbutton:
+                    // TODO remove pending request
+                break;
+        }
     }
 
     @Override
@@ -394,24 +412,37 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
 
     @Override
     public boolean onMarkerClick(Marker marker) {
-        String id = marker.getSnippet();
-        double userLat = marker.getPosition().latitude;
-        double userLon = marker.getPosition().longitude;
-        //Toast.makeText(this, "Pending ride id = "+id, Toast.LENGTH_SHORT).show();
+        if(syncWithServer)
+        {
+            String id = marker.getSnippet();
+            double userLat = marker.getPosition().latitude;
+            double userLon = marker.getPosition().longitude;
+            //Toast.makeText(this, "Pending ride id = "+id, Toast.LENGTH_SHORT).show();
 
-        URLpetition petition = new URLpetition("get shortest time");
-        StringBuilder sb = new StringBuilder();
-        sb.append("http://maps.googleapis.com/maps/api/directions/json?origin=");
-        sb.append(latitude);
-        sb.append(",");
-        sb.append(longitude);
-        sb.append("&destination=");
-        sb.append(userLat);
-        sb.append(",");
-        sb.append(userLon);
-        sb.append("&mode=driving&sensor=false");
-        petition.execute(sb.toString());
-        return false;
+            URLpetition petition = new URLpetition("get shortest time");
+            StringBuilder sb = new StringBuilder();
+            sb.append("http://maps.googleapis.com/maps/api/directions/json?origin=");
+            sb.append(latitude);
+            sb.append(",");
+            sb.append(longitude);
+            sb.append("&destination=");
+            sb.append(userLat);
+            sb.append(",");
+            sb.append(userLon);
+            sb.append("&mode=driving&sensor=false");
+            petition.execute(sb.toString());
+
+            showAcceptButton(id);
+            syncWithServer = false;
+        }
+        else
+        {
+            syncWithServer = true;
+            acceptbutton.setVisibility(View.INVISIBLE);
+            polylineroute.remove();
+        }
+
+        return true;
     }
 
     private class URLpetition extends AsyncTask<String, Void, String>
@@ -457,9 +488,20 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
             {
                 try
                 {
+                    ArrayList<LatLng> geopoints = new ArrayList<LatLng>();
+
                     JSONObject jsonObject = new JSONObject(result);
                     int shortestTimeTemp = jsonObject.getJSONArray("routes").getJSONObject(0).getJSONArray("legs").getJSONObject(0).getJSONObject("duration").getInt("value");
-                    // TODO show route
+                    JSONArray steps = jsonObject.getJSONArray("routes").getJSONObject(0).getJSONArray("legs").getJSONObject(0).getJSONArray("steps");
+                    int stepscount = steps.length();
+                    geopoints.add(new LatLng(steps.getJSONObject(0).getJSONObject("start_location").getDouble("lat"),steps.getJSONObject(0).getJSONObject("start_location").getDouble("lng")));
+                    for (int i = 0; i<stepscount; i++)
+                    {
+                        double lat = steps.getJSONObject(i).getJSONObject("end_location").getDouble("lat");
+                        double lng = steps.getJSONObject(i).getJSONObject("end_location").getDouble("lng");
+                        geopoints.add(new LatLng(lat, lng));
+                    }
+                    drawRoute(geopoints);
                     showMSG("Time to destination: " + shortestTimeTemp + " seconds");
                 }
                 catch(JSONException e)
@@ -475,5 +517,22 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
     private void showMSG(String msg)
     {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+    }
+
+    private void showAcceptButton(String rideid)
+    {
+        acceptbutton = (Button)findViewById(R.id.acceptbutton);
+        acceptbutton.setVisibility(View.VISIBLE);
+        acceptbutton.setOnClickListener(this);
+        this.rideid = rideid;
+    }
+
+    private void drawRoute(ArrayList<LatLng> geopoints)
+    {
+        PolylineOptions rectLine = new PolylineOptions().width(10).color(Color.RED);
+        for (int i = 0; i < geopoints.size(); i++) {
+            rectLine.add(geopoints.get(i));
+        }
+        polylineroute = map.addPolyline(rectLine);
     }
 }

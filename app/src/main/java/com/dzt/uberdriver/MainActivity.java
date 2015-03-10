@@ -146,7 +146,9 @@ public class MainActivity extends ActionBarActivity implements View.OnClickListe
             String retorno="";
             StringBuilder stringBuilder = new StringBuilder();
             try {
+                Log.i("tag-2", "si entro");
                 HttpResponse response = client.execute(get);
+                Log.i("tag-1", "si entro");
                 HttpEntity entity = response.getEntity();
                 //InputStream stream = new InputStream(entity.getContent(),"UTF-8");
                 InputStream stream = entity.getContent();
@@ -155,6 +157,8 @@ public class MainActivity extends ActionBarActivity implements View.OnClickListe
                 while ((line= r.readLine()) != null) {
                     stringBuilder.append(line);
                 }
+                Log.i("tag0", "si entro");
+
 
                 if(action.equals("login driver"))
                 {
@@ -172,6 +176,7 @@ public class MainActivity extends ActionBarActivity implements View.OnClickListe
         protected void onPostExecute(String result) {
             if (action.equals("login driver"))
             {
+                Log.i("tag1", "si entro");
                 if(result.equals("id not valid"))
                 {
                     showMSG("ID not valid");

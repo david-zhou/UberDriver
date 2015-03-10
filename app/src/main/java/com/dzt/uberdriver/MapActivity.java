@@ -79,7 +79,8 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
     double latitude, longitude;
     String rideid;
     Button acceptbutton;
-    Polyline polylineroute;
+    Polyline polylineroute = null;
+    String selectedmarker = "";
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -341,7 +342,19 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
         {
             default:
             case R.id.acceptbutton:
-                    // TODO remove pending request
+                SharedPreferences sp = getSharedPreferences("Session", MODE_PRIVATE);
+                String driverid = sp.getString("driver_id", "");
+
+                StringBuilder sb = new StringBuilder();
+                sb.append(getResources().getString(R.string.ip));
+                sb.append("uber/request/accept?driverid=");
+                sb.append(driverid);
+                sb.append("&pendingrequestid=");
+                sb.append(rideid);
+
+                URLpetition petition = new URLpetition("accept uber request");
+                petition.execute(sb.toString());
+
                 break;
         }
     }
@@ -412,7 +425,7 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
 
     @Override
     public boolean onMarkerClick(Marker marker) {
-        if(syncWithServer)
+        if(!marker.getId().equals(selectedmarker))
         {
             String id = marker.getSnippet();
             double userLat = marker.getPosition().latitude;
@@ -434,14 +447,19 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
 
             showAcceptButton(id);
             syncWithServer = false;
+            selectedmarker = marker.getId();
         }
         else
         {
+            selectedmarker = "";
             syncWithServer = true;
             acceptbutton.setVisibility(View.INVISIBLE);
-            polylineroute.remove();
+            if(polylineroute != null)
+            {
+                polylineroute.remove();
+                polylineroute = null;
+            }
         }
-
         return true;
     }
 
@@ -469,6 +487,8 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
                 while ((line= r.readLine()) != null) {
                     stringBuilder.append(line);
                 }
+
+
 
                 if(action.equals("get shortest time"))
                 {
@@ -509,6 +529,20 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
                     e.printStackTrace();
                 }
             }
+            else
+            {
+                if (action.equals("accept uber request"))
+                {
+                    if (result.equals("{request id not found}"))
+                    {
+                        showMSG("Request taken by other");
+                    }
+                    else
+                    {
+                        showMSG("On my way");
+                    }
+                }
+            }
         }
 
         @Override
@@ -529,6 +563,10 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
 
     private void drawRoute(ArrayList<LatLng> geopoints)
     {
+        if(polylineroute != null)
+        {
+            polylineroute.remove();
+        }
         PolylineOptions rectLine = new PolylineOptions().width(10).color(Color.RED);
         for (int i = 0; i < geopoints.size(); i++) {
             rectLine.add(geopoints.get(i));

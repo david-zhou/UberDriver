@@ -52,28 +52,11 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.LogRecord;
 
 
 public class MapActivity extends ActionBarActivity implements View.OnClickListener, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, GoogleMap.OnMarkerClickListener, LocationListener{
 
-    public static final String EXTRA_MESSAGE = "message";
-    public static final String PROPERTY_REG_ID = "registration_id";
-    private static final String PROPERTY_APP_VERSION = "appVersion";
     private final static int PLAY_SERVICES_RESOLUTION_REQUEST = 9000;
-
-    String SENDER_ID = "1050416204779";
-
-    static final String TAG = "GCMDemo";
-
-    TextView mDisplay;
-    GoogleCloudMessaging gcm;
-    AtomicInteger msgId = new AtomicInteger();
-    SharedPreferences prefs;
-    Context context;
-
-    String regid;
-
 
     private GoogleMap map;
     private GoogleApiClient mGoogleApiClient;
@@ -87,7 +70,7 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
     Location currentLocation;
     LatLng lastPointOnRoute;
     float rideDistance;
-
+    String driverid;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -109,130 +92,18 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
         createLocationRequest();
         mGoogleApiClient.connect();
 
-        /*
-        context = getApplicationContext();
-
-        if(checkPlayServices())
-        {
-            gcm = GoogleCloudMessaging.getInstance(this);
-            regid = getRegistrationId(context);
-            Log.d("Registration id = ", regid);
-
-            if (regid.isEmpty()) {
-                registerInBackground();
-            }
-        }
-        else
-        {
-            Log.i(TAG, "No valid Google Play Services APK found.");
-        }
-        */
+        SharedPreferences sp = getSharedPreferences("Session", MODE_PRIVATE);
+        driverid = sp.getString("driver_id", "");
     }
 
     protected void createLocationRequest()
     {
         locationRequest = new LocationRequest();
 
-        locationRequest.setInterval(3000);
-        locationRequest.setFastestInterval(3000);
+        locationRequest.setInterval(5000);
+        locationRequest.setFastestInterval(5000);
         locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
     }
-
-/*
-    private String getRegistrationId(Context context) {
-        final SharedPreferences prefs = getGCMPreferences(context);
-        String registrationId = prefs.getString(PROPERTY_REG_ID, "");
-        if (registrationId.isEmpty()) {
-            Log.i(TAG, "Registration not found.");
-            return "";
-        }
-        // Check if app was updated; if so, it must clear the registration ID
-        // since the existing registration ID is not guaranteed to work with
-        // the new app version.
-        int registeredVersion = prefs.getInt(PROPERTY_APP_VERSION, Integer.MIN_VALUE);
-        int currentVersion = getAppVersion(context);
-        if (registeredVersion != currentVersion) {
-            Log.i(TAG, "App version changed.");
-            return "";
-        }
-        return registrationId;
-    }
-
-
-    private SharedPreferences getGCMPreferences(Context context) {
-        // This sample app persists the registration ID in shared preferences, but
-        // how you store the registration ID in your app is up to you.
-        return getSharedPreferences(MapActivity.class.getSimpleName(),
-                Context.MODE_PRIVATE);
-    }
-
-    private static int getAppVersion(Context context) {
-        try {
-            PackageInfo packageInfo = context.getPackageManager()
-                    .getPackageInfo(context.getPackageName(), 0);
-            return packageInfo.versionCode;
-        } catch (PackageManager.NameNotFoundException e) {
-            // should never happen
-            throw new RuntimeException("Could not get package name: " + e);
-        }
-    }
-
-    private void registerInBackground() {
-        new AsyncTask<Void, Void, String>() {
-            @Override
-            protected String doInBackground(Void... params) {
-                String msg = "";
-                try {
-                    if (gcm == null) {
-                        gcm = GoogleCloudMessaging.getInstance(context);
-                    }
-                    regid = gcm.register(SENDER_ID);
-                    msg = "Device registered, registration ID=" + regid;
-
-                    // You should send the registration ID to your server over HTTP,
-                    // so it can use GCM/HTTP or CCS to send messages to your app.
-                    // The request to your server should be authenticated if your app
-                    // is using accounts.
-                    sendRegistrationIdToBackend();
-
-                    // For this demo: we don't need to send it because the device
-                    // will send upstream messages to a server that echo back the
-                    // message using the 'from' address in the message.
-
-                    // Persist the registration ID - no need to register again.
-                    storeRegistrationId(context, regid);
-                } catch (IOException ex) {
-                    msg = "Error :" + ex.getMessage();
-                    // If there is an error, don't just keep trying to register.
-                    // Require the user to click a button again, or perform
-                    // exponential back-off.
-                }
-                return msg;
-            }
-
-            @Override
-            protected void onPostExecute(String msg) {
-                //mDisplay.append(msg + "\n");
-            }
-        }.execute(null, null, null);
-
-    }
-
-    private void storeRegistrationId(Context context, String regId) {
-        final SharedPreferences prefs = getGCMPreferences(context);
-        int appVersion = getAppVersion(context);
-        Log.i(TAG, "Saving regId on app version " + appVersion);
-        SharedPreferences.Editor editor = prefs.edit();
-        editor.putString(PROPERTY_REG_ID, regId);
-        editor.putInt(PROPERTY_APP_VERSION, appVersion);
-        editor.commit();
-    }
-
-    private void sendRegistrationIdToBackend() {
-        // Your implementation here.
-        Log.d("reg id", regid);
-    }
-    */
 
     @Override
     protected void onResume() {
@@ -295,6 +166,22 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
             lastPointOnRoute = new LatLng(currentLocation.getLatitude(), currentLocation.getLongitude());
 
             Polyline polyline = map.addPolyline(line);
+        }
+        else
+        {
+            // TODO Update position on server
+            StringBuilder url = new StringBuilder();
+            url.append(getResources().getString(R.string.ip));
+            url.append("drivers/position/update?driverid=");
+            url.append(driverid);
+            url.append("&latitude=");
+            url.append(location.getLatitude());
+            url.append("&longitude=");
+            url.append(location.getLongitude());
+
+            URLpetition petition = new URLpetition("update driver position");
+            petition.execute(url.toString());
+
         }
     }
 
@@ -383,8 +270,7 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
         {
             default:
             case R.id.acceptbutton:
-                SharedPreferences sp = getSharedPreferences("Session", MODE_PRIVATE);
-                String driverid = sp.getString("driver_id", "");
+
 
                 StringBuilder sb = new StringBuilder();
                 sb.append(getResources().getString(R.string.ip));
@@ -439,20 +325,16 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
         sb.append(currentLocation.getLongitude());
         sb.append("&radius=0.005");
         HttpGet get = new HttpGet(sb.toString());
-        String retorno = "";
         StringBuilder stringBuilder = new StringBuilder();
         try {
             HttpResponse response = client.execute(get);
             HttpEntity entity = response.getEntity();
-            //InputStream stream = new InputStream(entity.getContent(),"UTF-8");
             InputStream stream = entity.getContent();
             BufferedReader r = new BufferedReader(new InputStreamReader(stream, "UTF-8"));
             String line;
             while ((line = r.readLine()) != null) {
                 stringBuilder.append(line);
             }
-            //threadMsg(stringBuilder.toString());
-            //Thread.sleep(7000);
         }
         catch (IOException e)
         {
@@ -554,7 +436,7 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
 
 
 
-                if(action.equals("get shortest time") || action.equals("accept uber request"))
+                if(action.equals("get shortest time") || action.equals("accept uber request") || action.equals("update driver position"))
                 {
                     return stringBuilder.toString();
                 }
@@ -615,6 +497,20 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
                             e.printStackTrace();
                         }
                         enableBeginRideButton();
+                    }
+                }
+                else
+                {
+                    if (action.equals("update driver position"))
+                    {
+                        if(result.equals("Location updated"))
+                        {
+
+                        }
+                        else
+                        {
+
+                        }
                     }
                 }
             }

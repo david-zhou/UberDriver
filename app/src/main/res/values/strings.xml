@@ -6,8 +6,10 @@
     <string name="action_settings">Settings</string>
     <string name="username">Enter your driver id</string>
     <string name="login">Login</string>
-    <string name="ip">http://192.168.1.36:8000/</string>
+    <string name="ip">http://192.168.1.83:8000/</string>
     <string name="title_activity_map">MapActivity</string>
     <string name="acceptbutton">Accept ride</string>
+    <string name="beginridebutton">BEGIN RIDE</string>
+    <string name="endridebutton">END RIDE</string>
 
 </resources>

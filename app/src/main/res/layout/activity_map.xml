@@ -21,4 +21,26 @@
         android:layout_alignParentBottom="true"
         android:layout_marginBottom="20dp"/>
 
+    <Button
+        android:id="@+id/beginridebutton"
+        android:layout_marginLeft="20dp"
+        android:layout_marginRight="20dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="invisible"
+        android:text="@string/beginridebutton"
+        android:layout_alignParentBottom="true"
+        android:layout_marginBottom="20dp"/>
+
+    <Button
+        android:id="@+id/endridebutton"
+        android:layout_marginLeft="20dp"
+        android:layout_marginRight="20dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="invisible"
+        android:text="@string/endridebutton"
+        android:layout_alignParentBottom="true"
+        android:layout_marginBottom="20dp"/>
+
 </RelativeLayout>

@@ -23,6 +23,8 @@ import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.gcm.GoogleCloudMessaging;
+import com.google.android.gms.location.LocationListener;
+import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
@@ -53,7 +55,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.LogRecord;
 
 
-public class MapActivity extends ActionBarActivity implements View.OnClickListener, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, GoogleMap.OnMarkerClickListener{
+public class MapActivity extends ActionBarActivity implements View.OnClickListener, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, GoogleMap.OnMarkerClickListener, LocationListener{
 
     public static final String EXTRA_MESSAGE = "message";
     public static final String PROPERTY_REG_ID = "registration_id";
@@ -75,12 +77,18 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
 
     private GoogleMap map;
     private GoogleApiClient mGoogleApiClient;
-    boolean syncWithServer=true;
+    private LocationRequest locationRequest;
+    boolean syncWithServer=true, onRide = false;
     double latitude, longitude;
-    String rideid;
-    Button acceptbutton;
+    String rideid, currentrideid;
+    Button acceptbutton, beginridebutton, endridebutton;
     Polyline polylineroute = null;
     String selectedmarker = "";
+    Location currentLocation;
+    LatLng lastPointOnRoute;
+    float rideDistance;
+
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -98,6 +106,7 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
                 .addOnConnectionFailedListener(this)
                 .addApi(LocationServices.API)
                 .build();
+        createLocationRequest();
         mGoogleApiClient.connect();
 
         /*
@@ -120,7 +129,16 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
         */
     }
 
+    protected void createLocationRequest()
+    {
+        locationRequest = new LocationRequest();
 
+        locationRequest.setInterval(3000);
+        locationRequest.setFastestInterval(3000);
+        locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+    }
+
+/*
     private String getRegistrationId(Context context) {
         final SharedPreferences prefs = getGCMPreferences(context);
         String registrationId = prefs.getString(PROPERTY_REG_ID, "");
@@ -139,6 +157,7 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
         }
         return registrationId;
     }
+
 
     private SharedPreferences getGCMPreferences(Context context) {
         // This sample app persists the registration ID in shared preferences, but
@@ -213,6 +232,7 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
         // Your implementation here.
         Log.d("reg id", regid);
     }
+    */
 
     @Override
     protected void onResume() {
@@ -260,10 +280,31 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
     }
 
     @Override
+    public void onLocationChanged(Location location) {
+        currentLocation = location;
+
+        if(onRide)
+        {
+            PolylineOptions line = new PolylineOptions().width(5).color(Color.BLUE);
+            line.add(lastPointOnRoute);
+            line.add(new LatLng(currentLocation.getLatitude(), currentLocation.getLongitude()));
+
+            float [] results = new float[1];
+            Location.distanceBetween(lastPointOnRoute.latitude, lastPointOnRoute.longitude, currentLocation.getLatitude(), currentLocation.getLongitude(), results);
+            rideDistance += results[0];
+            lastPointOnRoute = new LatLng(currentLocation.getLatitude(), currentLocation.getLongitude());
+
+            Polyline polyline = map.addPolyline(line);
+        }
+    }
+
+    @Override
     public void onConnected(Bundle bundle) {
         Location mLastLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
+        LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient,locationRequest, this);
         if (mLastLocation != null)
         {
+            currentLocation = mLastLocation;
             latitude = mLastLocation.getLatitude();
             longitude = mLastLocation.getLongitude();
 
@@ -272,7 +313,7 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
             map.moveCamera(CameraUpdateFactory.newLatLng(latLng));
 
             map.animateCamera(CameraUpdateFactory.zoomTo(16));
-            map.addMarker(new MarkerOptions().position(latLng).title("You are here")); //.icon(BitmapDescriptorFactory.fromResource(R.drawable.car_icon_top)).anchor(0.5,0.5)
+            //map.addMarker(new MarkerOptions().position(latLng).title("You are here")); //.icon(BitmapDescriptorFactory.fromResource(R.drawable.car_icon_top)).anchor(0.5,0.5)
 
             Thread timer = new Thread(new Runnable() {
                 @Override
@@ -354,7 +395,23 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
 
                 URLpetition petition = new URLpetition("accept uber request");
                 petition.execute(sb.toString());
+                acceptbutton.setVisibility(View.INVISIBLE);
 
+                break;
+
+            case R.id.beginridebutton:
+
+                enableEndRideButton();
+                // TODO begin trip
+                drawRideRoute();
+
+                break;
+
+            case R.id.endridebutton:
+
+                onRide = false;
+                showMSG("distance traveled = "+rideDistance);
+                // TODO end trip
                 break;
         }
     }
@@ -364,15 +421,22 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
 
     }
 
+    void drawRideRoute()
+    {
+        lastPointOnRoute = new LatLng(currentLocation.getLatitude(), currentLocation.getLongitude());
+        onRide = true;
+        rideDistance = 0;
+    }
+
     public String getUberRequest()
     {
         HttpClient client = new DefaultHttpClient();
         StringBuilder sb = new StringBuilder();
         sb.append(getResources().getString(R.string.ip));
         sb.append("uber/request/get?latitude=");
-        sb.append(latitude);
+        sb.append(currentLocation.getLatitude());
         sb.append("&longitude=");
-        sb.append(longitude);
+        sb.append(currentLocation.getLongitude());
         sb.append("&radius=0.005");
         HttpGet get = new HttpGet(sb.toString());
         String retorno = "";
@@ -405,7 +469,7 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
             int l = array.length();
             map.clear();
 
-            map.addMarker(new MarkerOptions().position(new LatLng(latitude, longitude)).title("You are here"));
+            //map.addMarker(new MarkerOptions().position(new LatLng(latitude, longitude)).title("You are here"));
 
             for(int i = 0; i < l; i++)
             {
@@ -435,9 +499,9 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
             URLpetition petition = new URLpetition("get shortest time");
             StringBuilder sb = new StringBuilder();
             sb.append("http://maps.googleapis.com/maps/api/directions/json?origin=");
-            sb.append(latitude);
+            sb.append(currentLocation.getLatitude());
             sb.append(",");
-            sb.append(longitude);
+            sb.append(currentLocation.getLongitude());
             sb.append("&destination=");
             sb.append(userLat);
             sb.append(",");
@@ -490,7 +554,7 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
 
 
 
-                if(action.equals("get shortest time"))
+                if(action.equals("get shortest time") || action.equals("accept uber request"))
                 {
                     return stringBuilder.toString();
                 }
@@ -540,6 +604,17 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
                     else
                     {
                         showMSG("On my way");
+                        try
+                        {
+                            JSONObject jsonObject = new JSONObject(result);
+                            String rideid = jsonObject.getString("ride_id");
+                            setRideId(rideid);
+                        }
+                        catch(JSONException e)
+                        {
+                            e.printStackTrace();
+                        }
+                        enableBeginRideButton();
                     }
                 }
             }
@@ -572,5 +647,26 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
             rectLine.add(geopoints.get(i));
         }
         polylineroute = map.addPolyline(rectLine);
+    }
+
+    private void enableBeginRideButton()
+    {
+        beginridebutton = (Button) findViewById(R.id.beginridebutton);
+        beginridebutton.setOnClickListener(this);
+        beginridebutton.setVisibility(View.VISIBLE);
+        acceptbutton.setVisibility(View.INVISIBLE);
+    }
+
+    private void enableEndRideButton()
+    {
+        endridebutton = (Button) findViewById(R.id.endridebutton);
+        endridebutton.setOnClickListener(this);
+        endridebutton.setVisibility(View.VISIBLE);
+        beginridebutton.setVisibility(View.INVISIBLE);
+    }
+
+    private void setRideId(String id)
+    {
+        this.currentrideid = id;
     }
 }

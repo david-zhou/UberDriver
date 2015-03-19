@@ -63,14 +63,13 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
     private LocationRequest locationRequest;
     boolean syncWithServer=true, onRide = false;
     double latitude, longitude;
-    String rideid, currentrideid;
+    String rideid, currentrideid, driverid, selectedmarker = "";
     Button acceptbutton, beginridebutton, endridebutton;
     Polyline polylineroute = null;
-    String selectedmarker = "";
     Location currentLocation;
     LatLng lastPointOnRoute;
     float rideDistance;
-    String driverid;
+    ArrayList<Marker> markers = new ArrayList<Marker>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -169,7 +168,6 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
         }
         else
         {
-            // TODO Update position on server
             StringBuilder url = new StringBuilder();
             url.append(getResources().getString(R.string.ip));
             url.append("drivers/position/update?driverid=");
@@ -183,6 +181,58 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
             petition.execute(url.toString());
 
         }
+    }
+
+    private void beginSyncThread()
+    {
+        Thread timer = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while(true)
+                {
+                    if (syncWithServer)
+                    {
+                        String response = getUberRequest();
+                        threadMsg(response);
+                    }
+
+                    try
+                    {
+                        Thread.sleep(7000);
+                    } catch (InterruptedException e)
+                    {
+                        e.printStackTrace();
+                    }
+                }
+            }
+
+            private void threadMsg(String msg) {
+                if (!msg.equals(null) && !msg.equals("")) {
+                    Message msgObj = handler.obtainMessage();
+                    Bundle b = new Bundle();
+                    b.putString("message", msg);
+                    msgObj.setData(b);
+                    handler.sendMessage(msgObj);
+                }
+            }
+
+            private final Handler handler = new Handler() {
+
+                public void handleMessage(Message msg) {
+
+                    String aResponse = msg.getData().getString("message");
+
+                    if ((null != aResponse)) {
+                        addMarkers(aResponse);
+                    }
+                    else
+                    {
+                        Toast.makeText(getBaseContext(),"Not Got Response From Server.",Toast.LENGTH_SHORT).show();
+                    }
+                }
+            };
+        });
+        timer.start();
     }
 
     @Override
@@ -201,57 +251,7 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
 
             map.animateCamera(CameraUpdateFactory.zoomTo(16));
             //map.addMarker(new MarkerOptions().position(latLng).title("You are here")); //.icon(BitmapDescriptorFactory.fromResource(R.drawable.car_icon_top)).anchor(0.5,0.5)
-
-            Thread timer = new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    while(true)
-                    {
-                        if (syncWithServer)
-                        {
-                            String response = getUberRequest();
-                            threadMsg(response);
-
-                        }
-
-                        try
-                        {
-                            Thread.sleep(7000);
-                        } catch (InterruptedException e)
-                        {
-                            e.printStackTrace();
-                        }
-                    }
-                }
-
-                private void threadMsg(String msg) {
-                    if (!msg.equals(null) && !msg.equals("")) {
-                        Message msgObj = handler.obtainMessage();
-                        Bundle b = new Bundle();
-                        b.putString("message", msg);
-                        msgObj.setData(b);
-                        handler.sendMessage(msgObj);
-                    }
-                }
-
-                private final Handler handler = new Handler() {
-
-                    public void handleMessage(Message msg) {
-
-                        String aResponse = msg.getData().getString("message");
-
-                        if ((null != aResponse)) {
-                            addMarkers(aResponse);
-                        }
-                        else
-                        {
-                            Toast.makeText(getBaseContext(),"Not Got Response From Server.",Toast.LENGTH_SHORT).show();
-                        }
-                    }
-                };
-            });
-            timer.start();
-
+            beginSyncThread();
         }
         else
         {
@@ -283,21 +283,25 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
                 petition.execute(sb.toString());
                 acceptbutton.setVisibility(View.INVISIBLE);
 
+                removeClients();
+
                 break;
 
             case R.id.beginridebutton:
 
                 enableEndRideButton();
-                // TODO begin trip
+                beginRide();
                 drawRideRoute();
+                polylineroute.remove();
+                polylineroute = null;
+                // TODO add route to destination
 
                 break;
 
             case R.id.endridebutton:
 
                 onRide = false;
-                showMSG("distance traveled = "+rideDistance);
-                // TODO end trip
+                endRide();
                 break;
         }
     }
@@ -305,6 +309,51 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
     @Override
     public void onConnectionFailed(ConnectionResult connectionResult) {
 
+    }
+
+    private void removeClients()
+    {
+        int l = markers.size();
+        for (int i = 0; i < l; i++)
+        {
+            if(!markers.get(i).getId().equals(selectedmarker))
+            {
+                markers.get(i).remove();
+            }
+        }
+    }
+
+    void beginRide()
+    {
+        StringBuilder sb = new StringBuilder();
+        sb.append(getResources().getString(R.string.ip));
+        sb.append("uber/ride/begin?rideid=");
+        sb.append(currentrideid);
+        sb.append("&latitude=");
+        sb.append(currentLocation.getLatitude());
+        sb.append("&longitude=");
+        sb.append(currentLocation.getLongitude());
+
+        URLpetition petition = new URLpetition("begin ride");
+        petition.execute(sb.toString());
+    }
+
+    void endRide()
+    {
+        StringBuilder sb = new StringBuilder();
+        sb.append(getResources().getString(R.string.ip));
+        sb.append("uber/ride/end?rideid=");
+        sb.append(currentrideid);
+        sb.append("&latitude=");
+        sb.append(currentLocation.getLatitude());
+        sb.append("&longitude=");
+        sb.append(currentLocation.getLongitude());
+        sb.append("&distance=");
+        sb.append(rideDistance);
+
+
+        URLpetition petition = new URLpetition("end ride");
+        petition.execute(sb.toString());
     }
 
     void drawRideRoute()
@@ -350,7 +399,7 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
             JSONArray array = new JSONArray(response);
             int l = array.length();
             map.clear();
-
+            markers.clear();
             //map.addMarker(new MarkerOptions().position(new LatLng(latitude, longitude)).title("You are here"));
 
             for(int i = 0; i < l; i++)
@@ -360,7 +409,8 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
                 double longitude = client.getDouble("user_lon");
                 String clientid = client.getString("user_id");
                 String rideid = client.getString("pending_ride_id");
-                map.addMarker(new MarkerOptions().position(new LatLng(latitude, longitude)).title(clientid).icon(BitmapDescriptorFactory.fromResource(R.drawable.client_icon)).snippet(rideid));
+                Marker marker = map.addMarker(new MarkerOptions().position(new LatLng(latitude, longitude)).title(clientid).icon(BitmapDescriptorFactory.fromResource(R.drawable.client_icon)).snippet(rideid));
+                markers.add(marker);
             }
         }
         catch(JSONException e)
@@ -409,119 +459,74 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
         return true;
     }
 
-    private class URLpetition extends AsyncTask<String, Void, String>
-    {
-        String action;
-        public URLpetition(String action)
-        {
-            this.action = action;
-        }
-        @Override
-        protected String doInBackground(String... params) {
-            HttpClient client = new DefaultHttpClient();
-            Log.d("url = ", params[0]);
-            HttpGet get = new HttpGet(params[0]);
-            String retorno="";
-            StringBuilder stringBuilder = new StringBuilder();
-            try {
-                HttpResponse response = client.execute(get);
-                HttpEntity entity = response.getEntity();
-                //InputStream stream = new InputStream(entity.getContent(),"UTF-8");
-                InputStream stream = entity.getContent();
-                BufferedReader r = new BufferedReader(new InputStreamReader(stream, "UTF-8"));
-                String line;
-                while ((line= r.readLine()) != null) {
-                    stringBuilder.append(line);
-                }
-
-
-
-                if(action.equals("get shortest time") || action.equals("accept uber request") || action.equals("update driver position"))
-                {
-                    return stringBuilder.toString();
-                }
-            }
-            catch(IOException e) {
-                Log.d("Error: ", e.getMessage());
-            }
-            Log.d("Return text = ", retorno);
-            return retorno;
-        }
-
-        @Override
-        protected void onPostExecute(String result) {
-            if (action.equals("get shortest time"))
-            {
-                try
-                {
-                    ArrayList<LatLng> geopoints = new ArrayList<LatLng>();
-
-                    JSONObject jsonObject = new JSONObject(result);
-                    int shortestTimeTemp = jsonObject.getJSONArray("routes").getJSONObject(0).getJSONArray("legs").getJSONObject(0).getJSONObject("duration").getInt("value");
-                    JSONArray steps = jsonObject.getJSONArray("routes").getJSONObject(0).getJSONArray("legs").getJSONObject(0).getJSONArray("steps");
-                    int stepscount = steps.length();
-                    geopoints.add(new LatLng(steps.getJSONObject(0).getJSONObject("start_location").getDouble("lat"),steps.getJSONObject(0).getJSONObject("start_location").getDouble("lng")));
-                    for (int i = 0; i<stepscount; i++)
-                    {
-                        double lat = steps.getJSONObject(i).getJSONObject("end_location").getDouble("lat");
-                        double lng = steps.getJSONObject(i).getJSONObject("end_location").getDouble("lng");
-                        geopoints.add(new LatLng(lat, lng));
-                    }
-                    drawRoute(geopoints);
-                    showMSG("Time to destination: " + shortestTimeTemp + " seconds");
-                }
-                catch(JSONException e)
-                {
-                    e.printStackTrace();
-                }
-            }
-            else
-            {
-                if (action.equals("accept uber request"))
-                {
-                    if (result.equals("{request id not found}"))
-                    {
-                        showMSG("Request taken by other");
-                    }
-                    else
-                    {
-                        showMSG("On my way");
-                        try
-                        {
-                            JSONObject jsonObject = new JSONObject(result);
-                            String rideid = jsonObject.getString("ride_id");
-                            setRideId(rideid);
-                        }
-                        catch(JSONException e)
-                        {
-                            e.printStackTrace();
-                        }
-                        enableBeginRideButton();
-                    }
-                }
-                else
-                {
-                    if (action.equals("update driver position"))
-                    {
-                        if(result.equals("Location updated"))
-                        {
-
-                        }
-                        else
-                        {
-
-                        }
-                    }
-                }
-            }
-        }
-
-        @Override
-        protected void onPreExecute() {}
-    }
     private void showMSG(String msg)
     {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+    }
+
+    private void postAcceptUberRequest(String json)
+    {
+        if (json.equals("{request id not found}"))
+        {
+            showMSG("Request taken by other");
+        }
+        else
+        {
+            showMSG("On my way");
+            try
+            {
+                JSONObject jsonObject = new JSONObject(json);
+                String rideid = jsonObject.getString("ride_id");
+                setRideId(rideid);
+            }
+            catch(JSONException e)
+            {
+                e.printStackTrace();
+            }
+            enableBeginRideButton();
+        }
+    }
+
+    private void postUpdateDriverPosition(String json)
+    {
+
+    }
+
+    private void enableUber()
+    {
+
+    }
+
+
+    private void postBeginRide(String json)
+    {
+
+    }
+
+    private void getGeoPoints(String json)
+    {
+        try
+        {
+            ArrayList<LatLng> geopoints = new ArrayList<LatLng>();
+
+            JSONObject jsonObject = new JSONObject(json);
+            int shortestTimeTemp = jsonObject.getJSONArray("routes").getJSONObject(0).getJSONArray("legs").getJSONObject(0).getJSONObject("duration").getInt("value");
+            JSONArray steps = jsonObject.getJSONArray("routes").getJSONObject(0).getJSONArray("legs").getJSONObject(0).getJSONArray("steps");
+            int stepscount = steps.length();
+            geopoints.add(new LatLng(steps.getJSONObject(0).getJSONObject("start_location").getDouble("lat"),steps.getJSONObject(0).getJSONObject("start_location").getDouble("lng")));
+            for (int i = 0; i<stepscount; i++)
+            {
+                double lat = steps.getJSONObject(i).getJSONObject("end_location").getDouble("lat");
+                double lng = steps.getJSONObject(i).getJSONObject("end_location").getDouble("lng");
+                geopoints.add(new LatLng(lat, lng));
+            }
+            drawRoute(geopoints);
+            showMSG("Time to destination: " + shortestTimeTemp + " seconds");
+        }
+        catch(JSONException e)
+        {
+            e.printStackTrace();
+        }
     }
 
     private void showAcceptButton(String rideid)
@@ -564,5 +569,69 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
     private void setRideId(String id)
     {
         this.currentrideid = id;
+    }
+
+    private class URLpetition extends AsyncTask<String, Void, String>
+    {
+        String action;
+        public URLpetition(String action)
+        {
+            this.action = action;
+        }
+        @Override
+        protected String doInBackground(String... params) {
+            HttpClient client = new DefaultHttpClient();
+            Log.d("url = ", params[0]);
+            HttpGet get = new HttpGet(params[0]);
+            StringBuilder stringBuilder = new StringBuilder();
+            try {
+                HttpResponse response = client.execute(get);
+                HttpEntity entity = response.getEntity();
+                //InputStream stream = new InputStream(entity.getContent(),"UTF-8");
+                InputStream stream = entity.getContent();
+                BufferedReader r = new BufferedReader(new InputStreamReader(stream, "UTF-8"));
+                String line;
+                while ((line= r.readLine()) != null) {
+                    stringBuilder.append(line);
+                }
+                return stringBuilder.toString();
+
+            }
+            catch(IOException e) {
+                Log.d("Error: ", e.getMessage());
+            }
+            return "";
+        }
+
+        @Override
+        protected void onPostExecute(String result) {
+
+            switch(action)
+            {
+                default:
+                    break;
+                case "get shortest time":
+                    getGeoPoints(result);
+                    break;
+                case "accept uber request":
+                    postAcceptUberRequest(result);
+                    break;
+                case "update driver position":
+                    postUpdateDriverPosition(result);
+                    break;
+                case "begin ride":
+                    postBeginRide(result);
+                    break;
+                case "end ride":
+                    enableUber();
+                    break;
+            }
+        }
+
+        @Override
+        protected void onPreExecute()
+        {
+
+        }
     }
 }

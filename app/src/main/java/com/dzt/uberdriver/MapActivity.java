@@ -1,6 +1,7 @@
 package com.dzt.uberdriver;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -166,21 +167,20 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
 
             Polyline polyline = map.addPolyline(line);
         }
-        else
-        {
-            StringBuilder url = new StringBuilder();
-            url.append(getResources().getString(R.string.ip));
-            url.append("drivers/position/update?driverid=");
-            url.append(driverid);
-            url.append("&latitude=");
-            url.append(location.getLatitude());
-            url.append("&longitude=");
-            url.append(location.getLongitude());
 
-            URLpetition petition = new URLpetition("update driver position");
-            petition.execute(url.toString());
+        StringBuilder url = new StringBuilder();
+        url.append(getResources().getString(R.string.ip));
+        url.append("drivers/position/update?driverid=");
+        url.append(driverid);
+        url.append("&latitude=");
+        url.append(location.getLatitude());
+        url.append("&longitude=");
+        url.append(location.getLongitude());
 
-        }
+        URLpetition petition = new URLpetition("update driver position");
+        petition.execute(url.toString());
+
+
     }
 
     private void beginSyncThread()
@@ -294,6 +294,7 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
                 drawRideRoute();
                 polylineroute.remove();
                 polylineroute = null;
+                // TODO update available = false
                 // TODO add route to destination
 
                 break;
@@ -302,6 +303,7 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
 
                 onRide = false;
                 endRide();
+
                 break;
         }
     }
@@ -492,9 +494,15 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
 
     }
 
-    private void enableUber()
+    private void rateUserActivity()
     {
+        Bundle params = new Bundle();
+        params.putString("rideId", currentrideid);
 
+        Intent intent = new Intent(this, RateUserActivity.class);
+        intent.putExtras(params);
+        startActivity(intent);
+        finish();
     }
 
 
@@ -623,7 +631,7 @@ public class MapActivity extends ActionBarActivity implements View.OnClickListen
                     postBeginRide(result);
                     break;
                 case "end ride":
-                    enableUber();
+                    rateUserActivity();
                     break;
             }
         }

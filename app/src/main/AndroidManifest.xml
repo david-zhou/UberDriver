@@ -33,7 +33,9 @@
 
         <activity
             android:name=".MainActivity"
-            android:label="@string/app_name" >
+            android:configChanges="orientation"
+            android:label="@string/app_name"
+            android:screenOrientation="portrait" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -57,7 +59,13 @@
 
         <activity
             android:name=".MapActivity"
-            android:label="@string/title_activity_map" >
+            android:configChanges="orientation"
+            android:label="@string/title_activity_map"
+            android:screenOrientation="portrait" >
+        </activity>
+        <activity
+            android:name=".RateUserActivity"
+            android:label="@string/title_activity_rate_user" >
         </activity>
     </application>
 

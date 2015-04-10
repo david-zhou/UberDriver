@@ -18,7 +18,7 @@ For deploying the app, you'll need to add certain dependencies to the gradle. In
 
 You will also need to run:
 - server https://github.com/david-zhou/uberserver
-- and the driver app https://github.com/david-zhou/UberDriver, 
+- and the user app https://github.com/david-zhou/UberClone, 
 and put the server IP in the strings file.
 
 For using Google Maps, Google Places and all other Google features, you need an API_KEY, so go to https://console.developers.google.com/project and get one
